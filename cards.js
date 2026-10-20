@@ -1,5 +1,5 @@
 /* ============================================================
-   ENTRE NÓS — DADOS DO JOGO
+   PONTO A DOIS — DADOS DO JOGO
    ------------------------------------------------------------
    Este arquivo concentra TODO o conteúdo. A estrutura de cada
    carta é a mesma que será usada na tabela do Supabase, então a

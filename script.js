@@ -1,5 +1,5 @@
 /* ============================================================
-   Entre Nós — Lógica do jogo
+   Ponto a Dois — Lógica do jogo
    JavaScript puro. Sem frameworks.
    Estrutura de dados em arrays/objetos para fácil edição.
    ============================================================ */
@@ -148,6 +148,16 @@
   /* ============================================================
      5. NAVEGAÇÃO ENTRE TELAS
      ============================================================ */
+  // Telas do jogo exigem login (quando o login está ativo)
+  function navigate(target) {
+    const A = window.EntreNosAuth;
+    if (A && A.enabled && (target === "setup" || target === "game")) {
+      const need = A.needs();
+      if (need) { A.setPending(target); goTo(need); return; }
+    }
+    goTo(target);
+  }
+
   function goTo(screenName) {
     $$(".screen").forEach((s) => s.classList.remove("is-active"));
     const target = $(`.screen[data-screen="${screenName}"]`);
@@ -968,7 +978,7 @@
   function bindEvents() {
     // Navegação por data-goto
     $$("[data-goto]").forEach((btn) => {
-      btn.addEventListener("click", () => goTo(btn.dataset.goto));
+      btn.addEventListener("click", () => navigate(btn.dataset.goto));
     });
     // Modais
     $$("[data-open-modal]").forEach((btn) => {
@@ -1000,6 +1010,8 @@
     $$(".screen").forEach((s) => s.classList.remove("is-active"));
     $(".screen--home").classList.add("is-active");
   }
+
+  window.EntreNosApp = { goTo, navigate, showToast };
 
   document.addEventListener("DOMContentLoaded", init);
 })();
