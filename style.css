@@ -1409,3 +1409,9 @@ button { background: none; border: none; cursor: pointer; touch-action: manipula
 @media (max-width: 359px) {
   .home-title { font-size: 14.5vw; }
 }
+
+
+/* Links legais na tela inicial */
+.home-legal { margin: 14px 0 0; display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; font-size: 0.82rem; color: var(--muted); }
+.home-legal a { color: var(--muted); text-decoration: underline; min-height: 24px; }
+.home-legal a:hover { color: var(--white); }
