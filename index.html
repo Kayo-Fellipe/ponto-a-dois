@@ -107,9 +107,15 @@
                 </div>
                 <div class="st-scale">
                   <div class="st-track" aria-hidden="true"><i id="intFill"></i></div>
-                  <div class="st-steps" id="intensityGrid" role="radiogroup" aria-labelledby="lblInt"></div>
+                  <div class="st-steps" id="intensityGrid" role="group" aria-labelledby="lblInt"></div>
                   <p class="st-help" id="intHelp"></p>
                 </div>
+              </div>
+
+              <div class="st-block">
+                <span class="st-label" id="lblGender">Quem é o homem do casal?</span>
+                <div class="st-modes" id="genderGrid" role="radiogroup" aria-labelledby="lblGender"></div>
+                <p class="st-hint">Serve para ajustar os textos (amado ou amada, por exemplo) e escolher cartas. Fica salvo apenas no seu aparelho.</p>
               </div>
 
               <div class="st-block">
@@ -298,6 +304,35 @@
       </section>
 
 
+      <!-- ============ TELA: CONFIRME SUA IDADE ============ -->
+      <section class="screen screen--auth" data-screen="age">
+        <div class="au">
+          <div class="au-grid">
+          <div class="au-hero">
+            <div class="au-brand">Ponto a Dois</div>
+            <p class="au-tag">Experiências para fortalecer a conexão entre vocês.</p>
+            <div class="st-fan au-fan" aria-hidden="true"></div>
+          </div>
+          <div class="au-panel">
+            <div>
+              <h1 class="au-title">Confirme sua idade</h1>
+              <p class="au-sub">Este jogo é só para maiores de 18 anos. Para liberar o conteúdo, precisamos confirmar sua idade com um documento.</p>
+            </div>
+            <ul class="au-steps">
+              <li>Leva cerca de 2 minutos.</li>
+              <li>Você envia uma foto do documento e uma selfie, em um serviço de verificação seguro.</li>
+              <li>Nós guardamos apenas o resultado: verificado ou não.</li>
+            </ul>
+            <p class="au-error is-info" id="ageStatus" role="status" hidden></p>
+            <button type="button" class="btn btn--primary btn--lg btn--block" id="ageStart">Verificar minha idade</button>
+            <button type="button" class="btn btn--ghost btn--block" id="ageRefresh">Já verifiquei, atualizar</button>
+            <p class="au-switch"><button type="button" class="au-link" id="ageLogout">Sair desta conta</button></p>
+          </div>
+          </div>
+        </div>
+      </section>
+
+
       <!-- ============ TELA DE JOGO ============ -->
       <section class="screen screen--game" data-screen="game">
         <div class="game-inner">
@@ -448,7 +483,7 @@
               <span class="howto-num">1</span>
               <div>
                 <span class="howto-step-title">Montem o jogo</span>
-                <p>Escolham o modo, as categorias e o nível de intensidade. No modo <b>Livre</b>, as cartas vêm variadas. A <b>Noite de Encontro</b> é uma sessão guiada de cerca de 20 minutos, que começa leve e vai esquentando aos poucos.</p>
+                <p>Escolham o modo, as categorias e os níveis de intensidade. No modo <b>Livre</b>, as cartas vêm variadas. A <b>Noite de Encontro</b> é uma sessão guiada de cerca de 20 minutos, que começa leve e vai esquentando aos poucos.</p>
               </div>
             </li>
             <li>

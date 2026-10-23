@@ -87,6 +87,7 @@
     if (!session) return "login";
     if (!profile) return null;
     if (!profile.birth_date || !profile.terms_accepted_at) { prefillComplete(); return "complete"; }
+    if (!profile.age_verified_at) return "age";
     return null;
   }
 
@@ -121,6 +122,7 @@
   async function signOut() {
     await client.auth.signOut();
     session = null; profile = null; pending = null;
+    clearContent();
     renderHomeUser();
     app().goTo("home");
   }
@@ -129,6 +131,7 @@
   function proceed() {
     const need = needs();
     if (need === "complete") { prefillComplete(); app().goTo("complete"); return; }
+    if (need === "age") { renderAge(); app().goTo("age"); return; }
     const target = pending || sessionStorage.getItem("en_next") || "setup";
     pending = null;
     sessionStorage.removeItem("en_next");
@@ -144,6 +147,83 @@
     if (!session) return;
     const returningFromOAuth = !!sessionStorage.getItem("en_next");
     if (["login", "signup"].includes(screen) || (returningFromOAuth && screen === "home")) proceed();
+  }
+
+  /* ---------- Conteúdo do jogo (vem do banco, só para quem tem idade verificada) ---------- */
+  let contentLoaded = false;
+
+  function clearContent() {
+    contentLoaded = false;
+    if (D) { D.cards.length = 0; D.positions.length = 0; }
+  }
+
+  async function loadContent(force) {
+    if (!client || !session) return false;
+    if (contentLoaded && !force) return true;
+    const [c, p] = await Promise.all([
+      client.from("cards").select("*").order("id"),
+      client.from("positions").select("*").order("sort"),
+    ]);
+    if (c.error || p.error) throw new Error((c.error || p.error).message);
+    D.cards.length = 0;
+    (c.data || []).forEach((r) => {
+      const card = { id: r.id, cat: r.cat, int: r.intensity, fmt: r.fmt, text: r.body };
+      if (r.options) card.options = r.options;
+      if (r.seconds) card.seconds = r.seconds;
+      if (r.truth) { card.truth = r.truth; card.dare = r.dare; }
+      if (r.dare_seconds) card.dareSeconds = r.dare_seconds;
+      if (r.who) card.who = r.who;
+      if (r.tags && r.tags.length) card.tags = r.tags;
+      if (r.for_gender && r.for_gender !== "ambos") card.forGender = r.for_gender;
+      D.cards.push(card);
+    });
+    D.positions.length = 0;
+    (p.data || []).forEach((r) => D.positions.push({ name: r.name, int: r.intensity, image: r.image || "", desc: r.description || "" }));
+    contentLoaded = true;
+    return true;
+  }
+
+  /* ---------- Verificação de idade ---------- */
+  async function renderAge() {
+    const box = $("#ageStatus");
+    showMsg(box, "");
+    if (!session) return;
+    const { data } = await client
+      .from("age_verifications")
+      .select("status, created_at")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!data) return;
+    if (data.status === "pending") showMsg(box, "Sua verificação está em análise. Isso pode levar alguns minutos.", "info");
+    else if (data.status === "rejected") showMsg(box, "Não conseguimos confirmar sua idade. Você pode tentar de novo.");
+    else if (data.status === "expired") showMsg(box, "A verificação expirou. Inicie uma nova.");
+  }
+
+  async function onAgeStart() {
+    const box = $("#ageStatus");
+    const btn = $("#ageStart");
+    showMsg(box, "");
+    busy(btn, true, "Abrindo…");
+    try {
+      const { data, error } = await client.functions.invoke("age-start", { body: { returnUrl: redirectUrl() + "?age=done" } });
+      busy(btn, false);
+      if (error || !data || !data.url) throw error || new Error("sem url");
+      location.href = data.url;
+    } catch (e) {
+      busy(btn, false);
+      showMsg(box, "A verificação de idade ainda não está disponível. Volte em breve.", "info");
+    }
+  }
+
+  async function onAgeRefresh() {
+    const btn = $("#ageRefresh");
+    busy(btn, true, "Atualizando…");
+    await loadProfile();
+    busy(btn, false);
+    if (profile && profile.age_verified_at) { proceed(); return; }
+    await renderAge();
+    if (!$("#ageStatus").textContent) showMsg($("#ageStatus"), "Ainda não recebemos a confirmação. Tente de novo em instantes.", "info");
   }
 
   /* ---------- Telas ---------- */
@@ -302,6 +382,9 @@
     $("#forgotBtn").addEventListener("click", onForgot);
     $$("[data-auth='google']").forEach((b) => b.addEventListener("click", onGoogle));
     $("#completeLogout").addEventListener("click", signOut);
+    $("#ageStart").addEventListener("click", onAgeStart);
+    $("#ageRefresh").addEventListener("click", onAgeRefresh);
+    $("#ageLogout").addEventListener("click", signOut);
 
     // Importante: não chamar o Supabase dentro do callback (evita travar). Usa setTimeout.
     client.auth.onAuthStateChange((event, s) => {
@@ -311,12 +394,18 @@
     const { data } = await client.auth.getSession();
     session = data.session;
     await refresh("INITIAL");
+    // Volta do provedor de verificação de idade
+    if (new URLSearchParams(location.search).get("age") === "done") {
+      history.replaceState(null, "", location.pathname);
+      if (session) { await loadProfile(); if (profile && profile.age_verified_at) proceed(); else { renderAge(); app().goTo("age"); } }
+    }
   }
 
   window.EntreNosAuth = {
     enabled,
     needs,
     setPending: (t) => { pending = t; },
+    loadContent,
     signOut,
   };
 

@@ -38,7 +38,8 @@
   const defaultSettings = {
     categories: ["conexao", "diversao", "verdade", "carinho", "intimidade", "posicoes"],
     catsVersion: 3,
-    intensity: "picante",
+    intensities: ["leve", "picante"],
+    man: "",           // quem é o homem do casal: "p1" | "p2" | "" (não informar)
     mode: "livre",   // "livre" | "noite"
     player1: "",
     player2: "",
@@ -89,6 +90,16 @@
         merged.catsVersion = 3;
       }
       if (merged.mode !== "livre" && merged.mode !== "noite") merged.mode = "livre";
+      // Migração: antes havia um único nível cumulativo ("intensity"); agora é uma lista de níveis
+      if (!Array.isArray(parsed.intensities)) {
+        const idx = INT_ORDER.indexOf(parsed.intensity);
+        merged.intensities = idx >= 0 ? INT_ORDER.slice(0, idx + 1) : [...defaultSettings.intensities];
+      }
+      merged.intensities = INT_ORDER.filter((i) => merged.intensities.includes(i));
+      if (!merged.intensities.length) merged.intensities = [...defaultSettings.intensities];
+      delete merged.intensity;
+      delete merged.couple;
+      if (!["p1", "p2", ""].includes(merged.man)) merged.man = "";
       return merged;
     } catch {
       return { ...defaultSettings };
@@ -236,9 +247,15 @@
     wrap.innerHTML = card(left, "fan-card--l") + card(right, "fan-card--r") + card(center, "fan-card--c is-pop");
   }
 
+  function levelsLabel() {
+    const on = INT_ORDER.filter((i) => state.settings.intensities.includes(i));
+    if (on.length === INT_ORDER.length) return "Todos os níveis";
+    return on.map((id) => INTENSITIES.find((i) => i.id === id).name).join(" + ");
+  }
+
   function renderSummary() {
     const n = state.settings.categories.length;
-    const intName = (INTENSITIES.find((i) => i.id === state.settings.intensity) || {}).name || "";
+    const intName = levelsLabel();
     const mode = state.settings.mode === "noite" ? "Noite de Encontro" : "Modo livre";
     $("#stSummary").textContent = `${n} ${n === 1 ? "categoria" : "categorias"} · ${intName} · ${mode}`;
   }
@@ -279,25 +296,34 @@
       catWrap.appendChild(tile);
     });
 
-    // Intensidade (trilha com 3 pontos)
-    const curIdx = Math.max(0, INT_ORDER.indexOf(state.settings.intensity));
+    // Intensidade (a pessoa marca os níveis que quiser)
+    const on = INT_ORDER.filter((i) => state.settings.intensities.includes(i));
+    const idxs = on.map((i) => INT_ORDER.indexOf(i));
+    const lo = Math.min(...idxs), hi = Math.max(...idxs);
     const intWrap = $("#intensityGrid");
     intWrap.innerHTML = "";
-    INTENSITIES.forEach((it, i) => {
+    INTENSITIES.forEach((it) => {
+      const sel = on.includes(it.id);
       const opt = document.createElement("button");
       opt.type = "button";
-      opt.className = "st-step" + (i === curIdx ? " is-current" : i < curIdx ? " is-done" : "");
+      opt.className = "st-step" + (sel ? " is-on" : "");
       opt.dataset.int = it.id;
-      opt.setAttribute("role", "radio");
-      opt.setAttribute("aria-checked", i === curIdx ? "true" : "false");
+      opt.setAttribute("role", "checkbox");
+      opt.setAttribute("aria-checked", sel ? "true" : "false");
       opt.innerHTML = `<span class="st-dotwrap"><span class="st-dot"></span></span>${it.name}`;
-      opt.addEventListener("click", () => setIntensity(it.id));
+      opt.addEventListener("click", () => toggleIntensity(it.id));
       intWrap.appendChild(opt);
     });
-    $("#intFill").style.width = curIdx * 50 + "%";
-    const curInt = INTENSITIES[curIdx];
-    $("#intLevel").textContent = curInt.name;
-    $("#intHelp").textContent = curInt.desc + (curIdx === 0 ? "." : ". Inclui também as cartas dos níveis anteriores.");
+    const fill = $("#intFill");
+    fill.style.marginLeft = lo * 50 + "%";
+    fill.style.width = (hi - lo) * 50 + "%";
+    $("#intLevel").textContent = levelsLabel();
+    $("#intHelp").textContent =
+      on.length === 1
+        ? INTENSITIES.find((i) => i.id === on[0]).desc + "."
+        : "Mistura as cartas dos níveis escolhidos.";
+
+    renderGenderBlock();
 
     renderFan();
     renderSummary();
@@ -321,8 +347,45 @@
     renderSetup();
   }
 
-  function setIntensity(id) {
-    state.settings.intensity = id;
+  // "Quem é o homem do casal?" Serve para ajustar o português e escolher cartas (fica só no aparelho)
+  function renderGenderBlock() {
+    const wrap = $("#genderGrid");
+    if (!wrap) return;
+    wrap.innerHTML = "";
+    const opts = [
+      { id: "p1", name: playerName(1) },
+      { id: "p2", name: playerName(2) },
+      { id: "", name: "Prefiro não informar" },
+    ];
+    opts.forEach((o) => {
+      const sel = state.settings.man === o.id;
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "st-mode st-mode--compact" + (sel ? " is-selected" : "");
+      b.dataset.man = o.id;
+      b.setAttribute("role", "radio");
+      b.setAttribute("aria-checked", sel ? "true" : "false");
+      const r = document.createElement("span");
+      r.className = "st-radio";
+      const n = document.createElement("span");
+      n.className = "st-mode-name";
+      n.textContent = o.name;
+      b.append(r, n);
+      b.addEventListener("click", () => { state.settings.man = o.id; saveSettings(); renderGenderBlock(); });
+      wrap.appendChild(b);
+    });
+  }
+
+  function toggleIntensity(id) {
+    const list = state.settings.intensities;
+    const i = list.indexOf(id);
+    if (i >= 0) {
+      if (list.length <= 1) { showToast("Escolha ao menos um nível de intensidade."); return; }
+      list.splice(i, 1);
+    } else {
+      list.push(id);
+    }
+    state.settings.intensities = INT_ORDER.filter((x) => list.includes(x));
     saveSettings();
     renderSetup();
   }
@@ -331,10 +394,12 @@
     $("#player1Name").addEventListener("input", (e) => {
       state.settings.player1 = e.target.value.trim();
       saveSettings();
+      renderGenderBlock();
     });
     $("#player2Name").addEventListener("input", (e) => {
       state.settings.player2 = e.target.value.trim();
       saveSettings();
+      renderGenderBlock();
     });
   }
 
@@ -342,9 +407,9 @@
      7. JOGO — baralho, sorteio, formatos e ações
      ============================================================ */
 
+  // Níveis escolhidos pela pessoa (qualquer combinação)
   function allowedInts() {
-    const idx = INT_ORDER.indexOf(state.settings.intensity);
-    return INT_ORDER.slice(0, (idx < 0 ? 1 : idx) + 1);
+    return INT_ORDER.filter((i) => state.settings.intensities.includes(i));
   }
 
   function playerName(n) {
@@ -352,12 +417,49 @@
     return v || `Jogador ${n}`;
   }
 
+  // "h" (homem), "m" (mulher) ou "" (não informado) para o jogador n
+  function genderOf(n) {
+    const man = state.settings.man;
+    if (!man) return "";
+    return man === "p" + n ? "h" : "m";
+  }
+
+  // Ajusta "amado(a)" para "amado"/"amada" quando se sabe de quem o texto fala.
+  // Cartas para os dois ficam neutras. Se o texto cita {outro}, fala da outra pessoa.
+  function agree(str, card, raw) {
+    if (!card || cardWho(card) === "ambos") return str;
+    const subject = raw.includes("{outro}") ? (state.turn === 1 ? 2 : 1) : state.turn;
+    const g = genderOf(subject);
+    if (!g) return str;
+    return str
+      .replace(/\bele\(a\)/g, g === "h" ? "ele" : "ela")
+      .replace(/o\(a\)/g, g === "h" ? "o" : "a");
+  }
+
+  function genderOk(c, g) {
+    return !c.forGender || c.forGender === "ambos" || c.forGender === g;
+  }
+
+  // Pega a próxima carta que serve para quem está na vez (cartas "h"/"m" respeitam o gênero)
+  function pullCard() {
+    const g = genderOf(state.turn);
+    while (state.drawIndex < state.deck.length) {
+      const i = state.drawIndex;
+      if (genderOk(state.deck[i], g)) return state.deck[i];
+      const j = state.deck.findIndex((x, idx) => idx > i && genderOk(x, g));
+      if (j > -1) { [state.deck[i], state.deck[j]] = [state.deck[j], state.deck[i]]; continue; }
+      state.deck.splice(i, 1); // nenhuma carta restante serve para esta vez
+    }
+    return null;
+  }
+
   // {atual} = quem está na vez; {outro} = a outra pessoa
-  function fillTokens(str) {
+  function fillTokens(str, card) {
     if (!str) return "";
     const cur = state.turn;
     const oth = cur === 1 ? 2 : 1;
-    return str.replace(/\{atual\}/g, playerName(cur)).replace(/\{outro\}/g, playerName(oth));
+    const named = str.replace(/\{atual\}/g, playerName(cur)).replace(/\{outro\}/g, playerName(oth));
+    return agree(named, card, str);
   }
 
   function cardWho(c) {
@@ -468,12 +570,23 @@
     return deck;
   }
 
-  function startGame() {
+  async function startGame() {
     clearWidgets();
+    // As cartas vêm do banco (só para quem tem idade verificada)
+    const A = window.EntreNosAuth;
+    if (A && A.enabled) {
+      try {
+        await A.loadContent();
+      } catch (e) {
+        showToast("Não foi possível carregar as cartas. Verifique a conexão.");
+        goTo("setup");
+        return;
+      }
+    }
     state.mode = state.settings.mode === "noite" ? "noite" : "livre";
     state.deck = state.mode === "noite" ? buildGuidedDeck() : buildFreeDeck();
     if (state.deck.length === 0) {
-      showToast("Nenhuma carta para essas escolhas. Ajuste as categorias.");
+      showToast("Nenhuma carta disponível para essas escolhas. Ajuste as categorias, os níveis ou o tipo de casal.");
       goTo("setup");
       return;
     }
@@ -488,13 +601,15 @@
   }
 
   function drawCard(noAnim) {
-    if (state.drawIndex >= state.deck.length) {
+    let c = pullCard();
+    if (!c) {
       if (state.mode === "noite") { showEnd(); return; }
       // Modo livre: reembaralha sem repetir a carta anterior
       state.deck = buildFreeDeck(state.currentCard);
       state.drawIndex = 0;
+      c = pullCard();
+      if (!c) { showToast("Nenhuma carta disponível para essas escolhas."); goTo("setup"); return; }
     }
-    const c = state.deck[state.drawIndex];
     state.drawIndex++;
     state.currentCard = c;
     renderCard(c, noAnim);
@@ -644,7 +759,7 @@
     return btn;
   }
 
-  function buildOptions(opts) {
+  function buildOptions(opts, card) {
     const wrap = document.createElement("div");
     wrap.className = "xopts";
     opts.forEach((txt, i) => {
@@ -656,7 +771,7 @@
       letter.textContent = "AB"[i] || String(i + 1);
       const t = document.createElement("span");
       t.className = "xopt-text";
-      t.textContent = fillTokens(txt);
+      t.textContent = fillTokens(txt, card);
       b.append(letter, t);
       b.addEventListener("click", () => {
         const all = $$(".xopt", wrap);
@@ -692,7 +807,7 @@
         b.classList.toggle("is-picked", k === kind);
         b.classList.toggle("is-dim", k !== kind);
       });
-      textEl.textContent = fillTokens(kind === "truth" ? c.truth : c.dare);
+      textEl.textContent = fillTokens(kind === "truth" ? c.truth : c.dare, c);
       fmtEl.textContent = kind === "truth" ? "Verdade" : "Desafio";
       if (kind === "dare" && c.dareSeconds) slot.appendChild(buildTimer(c.dareSeconds));
       adjustCardText();
@@ -717,7 +832,7 @@
     box.textContent = "";
     let node = null;
     if (c.fmt === "vd") node = buildVD(c, f);
-    else if (c.options && c.options.length) node = buildOptions(c.options);
+    else if (c.options && c.options.length) node = buildOptions(c.options, c);
     else if (c.seconds) node = buildTimer(c.seconds);
     else if (f && f.countdown) node = buildCountdown();
     if (node) box.appendChild(node);
@@ -779,7 +894,7 @@
       fmtEl.hidden = !f;
 
       // Texto e dica
-      $("#cardText").textContent = fillTokens(c.text);
+      $("#cardText").textContent = fillTokens(c.text, c);
       const hintText = fillTokens(c.hint !== undefined ? c.hint : f ? f.hint : "");
       const hintEl = $("#cardHint");
       hintEl.textContent = hintText;
@@ -881,7 +996,9 @@
       const cur = state.currentCard;
       const list = (cur && state.reserve[cur.stage]) || [];
       if (!list.length) { showToast("Não há mais cartas nesta etapa."); return; }
-      const repl = list.shift();
+      const gi = list.findIndex((x) => genderOk(x, genderOf(state.turn)));
+      if (gi < 0) { showToast("Não há mais cartas nesta etapa."); return; }
+      const repl = list.splice(gi, 1)[0];
       state.deck[state.drawIndex - 1] = repl;
       state.currentCard = repl;
       renderCard(repl);
